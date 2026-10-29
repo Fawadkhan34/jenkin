@@ -1,30 +1,52 @@
-cdpipeline {
-    agent any
 
-    environment {
-        VERCEL_TOKEN = credentials('vercel_token')
+pipeline {
+    agent {
+        docker {
+            image 'node:22-alpine'
+        }
+    }
+
+    triggers {
+        pollSCM('H/2 * * * *')
     }
 
     stages {
-        stage('Install') {
-            steps {
-                bat 'npm install'
-            }
-        }
-        stage('Test') {
-            steps {
-                echo 'Skipping tests - no test script found'
-            }
-        }
         stage('Build') {
             steps {
-                bat 'npm run build'
+                echo 'Installing dependencies...'
+                sh 'npm ci'
+
+                echo 'Building Next.js application...'
+                sh 'npm run build'
             }
         }
+
+        stage('Test') {
+            steps {
+                echo 'Running project tests...'
+                sh 'npm test --if-present'
+            }
+        }
+
         stage('Deploy') {
             steps {
-                bat 'npx vercel --prod --yes --token=%VERCEL_TOKEN%'
+                echo 'Archiving Next.js build output...'
+                archiveArtifacts(
+                    artifacts: '.next/**,public/**',
+                    allowEmptyArchive: false,
+                    fingerprint: true
+                )
             }
+        }
+    }
+
+    post {
+        success {
+            echo 'Build, Test and Deploy completed!'
+        }
+
+        failure {
+            echo 'Pipeline failed. Check Console Output.'
         }
     }
 }
